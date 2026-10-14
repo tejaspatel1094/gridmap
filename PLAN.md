@@ -5,77 +5,122 @@
 > **How to use this file:** do one milestone at a time. Each milestone ends with
 > a working app and a git commit. Do not start the next milestone until the
 > checkboxes in the current one are ticked.
->
-> When working with Claude Code, say: *"Read SPEC.md and PLAN.md. Do Milestone 3
-> only. Stop when the verify steps pass."* Do not ask it to do the whole plan at
-> once — you will get a large pile of code you don't understand and can't debug.
 
 ---
 
-## Milestone 0 — Prerequisites (do this yourself, not with Claude)
+## Current state
 
-Before any code exists.
+**Last updated:** October 2026
+**Milestones complete:** 0, 1
+**Next up:** Milestone 2 — database schema and migrations
 
-- [ ] Register for an EIA API key: https://www.eia.gov/opendata/register.php
-- [ ] Paste the key somewhere safe. You'll put it in `.env` in Milestone 1.
-- [ ] Confirm the key works. In a browser, open:
-      `https://api.eia.gov/v2/electricity/electric-power-operational-data?api_key=YOUR_KEY`
-      You should get JSON describing the route, not an error.
-- [ ] Install Node 20+ — `node --version`
-- [ ] Install Python 3.11+ — `python3 --version`
-- [ ] Install Docker Desktop and confirm it is running — `docker ps`
-- [ ] Create an empty public repo on GitHub named `gridmap`. **Do not** let
-      GitHub add a README — an auto-created README causes the "unrelated
-      histories" push error.
+### Where things live
 
-**Why first:** every one of these can block you for an hour. Hitting them while
-also debugging code makes both harder.
+| Thing | Location |
+|-------|----------|
+| Project root | `/Users/tejaspatel/Development/gridmap` |
+| GitHub repo | `github.com/tejaspatel1094/gridmap` |
+| Backend | `backend/` — venv at `backend/.venv` |
+| Frontend | `frontend/` |
+| Database | Postgres 16 in Docker, `localhost:5432` |
+
+### How to start the app
+
+Three terminals, all three required:
+
+```bash
+# 1. Database (runs in background, survives terminal close)
+cd ~/Development/gridmap
+docker compose up -d
+
+# 2. API — the `source` line is required in EVERY new terminal
+cd ~/Development/gridmap/backend
+source .venv/bin/activate
+uvicorn app.main:app --reload
+
+# 3. Frontend
+cd ~/Development/gridmap/frontend
+npm run dev
+```
+
+Then open http://localhost:5173
+
+### Decisions made during the build that differ from the original plan
+
+- **Python 3.15**, not 3.11. The system Python was 3.9 (end of life), so the venv
+  was rebuilt on Homebrew's 3.15. Note that pinned versions in `requirements.txt`
+  had to be regenerated — `psycopg-binary` had no wheel for 3.15 at the old pin.
+  **Rule learned: pin within a Python version, regenerate when changing versions.**
+- **Node 26** via Homebrew.
+- **ESLint** chosen over Oxlint during Vite scaffolding — more common, so
+  error messages are searchable.
+- **Docker kept** rather than falling back to SQLite. Docker Desktop was
+  available after all.
+- **Separate repo**, not nested inside VisualMap. An early attempt at nesting
+  created a gitlink (mode 160000) that pushed a pointer instead of the files.
 
 ---
 
-## Milestone 1 — Skeleton that runs end to end
+## Milestone 0 — Prerequisites ✅ COMPLETE
 
-**Goal:** a browser page that displays a string fetched from the API, which got
-it from Postgres. No real data yet. This proves all three layers talk to each
-other, which is the part that breaks.
-
-- [ ] `git init`, create `.gitignore` (Python, Node, `.env`, `__pycache__`, `node_modules`, `dist`)
-- [ ] Add `SPEC.md`, `PLAN.md`, `CLAUDE.md`, `README.md`
-- [ ] Write `docker-compose.yml` with one `db` service: Postgres 16, named
-      volume for persistence, port 5432, user/password/db all `gridmap`
-- [ ] `docker compose up -d` and connect to confirm it's alive
-- [ ] `backend/` — venv, install `fastapi uvicorn sqlalchemy psycopg[binary] alembic pydantic-settings httpx python-dotenv`
-- [ ] `app/config.py` reads `DATABASE_URL`, `EIA_API_KEY`, `CORS_ORIGINS` from `.env`
-- [ ] `app/main.py` — FastAPI app, CORS middleware allowing the Vite origin, and
-      a `GET /api/health` that runs `SELECT 1` against Postgres and returns `{"db": "ok"}`
-- [ ] `frontend/` — `npm create vite@latest frontend -- --template react-ts`
-- [ ] `App.tsx` fetches `/api/health` on mount and renders the result
-- [ ] Set up the Vite dev proxy so `/api` forwards to `localhost:8000`
-      (avoids CORS problems entirely in development)
-
-**Verify:** three terminals — `docker compose up -d`, `uvicorn app.main:app --reload`,
-`npm run dev`. Open localhost:5173 and see "db: ok" on the page.
-
-**Commit:** `feat: end-to-end skeleton with health check`
-
-> **This is the most important milestone.** Everything after it is adding
-> features to a working system. Do not move on until the browser genuinely
-> displays a value that came from the database.
+- [x] EIA API key registered and stored in `.env`
+- [x] Node 26 installed (`brew install node`)
+- [x] Python 3.15 installed (`brew install python@3.15`)
+- [x] Docker Desktop installed and running
+- [x] GitHub repo `gridmap` created
 
 ---
 
-## Milestone 2 — Schema and migrations
+## Milestone 1 — Skeleton that runs end to end ✅ COMPLETE
 
-- [ ] `app/models.py` — `State` and `Generation` tables exactly as in SPEC §4,
-      including the `UNIQUE (state_code, year, fuel_code)` constraint
+**Goal:** a browser page displaying a value fetched from the API, which got it
+from Postgres. Achieved — the page shows `api: ok` / `db: ok`.
+
+- [x] `git init`, `.gitignore` covering `.env`, `.venv/`, `node_modules/`, `dist/`
+- [x] `SPEC.md`, `PLAN.md`, `CLAUDE.md` committed
+- [x] `docker-compose.yml` with Postgres 16, named volume `pgdata`, port 5432
+- [x] `docker compose up -d` — verified with
+      `docker compose exec db psql -U gridmap -d gridmap -c "SELECT version();"`
+- [x] `backend/.venv` created, packages installed, `requirements.txt` frozen
+- [x] `app/config.py` — pydantic-settings reading `../.env`
+- [x] `app/db.py` — SQLAlchemy engine, `SessionLocal`, `get_db` dependency
+- [x] `app/main.py` — FastAPI app, CORS middleware, `GET /api/health`
+- [x] `frontend/` scaffolded with Vite + React + TypeScript
+- [x] Vite dev proxy forwarding `/api` to `localhost:8000`
+- [x] `App.tsx` fetching `/api/health` with loading and error states
+- [x] Verified: browser shows `api: ok`, `db: ok`; uvicorn logs `200 OK`
+
+**Committed:** `feat: end-to-end skeleton with health check`
+
+### Problems hit and how they were solved
+
+Keep these — they will recur.
+
+| Symptom | Cause | Fix |
+|---------|-------|-----|
+| `command not found: uvicorn` / `pip` / `python` | venv not activated in a new terminal | `source .venv/bin/activate` — check for `(.venv)` in the prompt |
+| `(.venv)` present but tool still missing | venv active but empty after `rm -rf .venv` | `pip install -r requirements.txt` |
+| Claude Code "no file tools" | Corporate managed settings denying all tools + filesystem sandbox | Not self-fixable; built manually instead |
+| Files invisible to tooling | Filenames saved as `# SPEC.md` with a literal `#` prefix | `mv "# SPEC.md" SPEC.md` — quotes required, `#` starts a comment in bash |
+| `create mode 160000 gridmap` | `git init` inside an existing repo created a gitlink | `git rm --cached gridmap`, move folder out, init separately |
+| `Address already in use` | Old uvicorn still holding port 8000 | `kill -9 $(lsof -t -i :8000)` |
+| `No module named 'app'` | `app/` folder and `__init__.py` not created yet | Create the folder with an empty `__init__.py` |
+| `Attribute "app" not found` | `main.py` existed but was empty | Paste the contents in |
+| `No matching distribution psycopg-binary==3.2.13` | Pinned version had no wheel for Python 3.15 | Reinstall unpinned, re-freeze |
+
+---
+
+## Milestone 2 — Schema and migrations ⬅ NEXT
+
+- [ ] `app/models.py` — `State` and `Generation` tables per SPEC §4,
+      including `UNIQUE (state_code, year, fuel_code)`
 - [ ] `alembic init alembic`, point it at `DATABASE_URL` from config
-- [ ] Autogenerate the first migration, **then read it before applying it** —
-      autogenerate gets things wrong and this is a good habit to build now
+- [ ] Autogenerate the first migration, **read it before applying**
 - [ ] `alembic upgrade head`
 - [ ] Confirm both tables exist in Postgres
-- [ ] Test the reset path: `alembic downgrade base` then `upgrade head` again
+- [ ] Test the reset path: `alembic downgrade base` then `upgrade head`
 
-**Verify:** tables exist, migration runs cleanly from an empty database.
+**Verify:** tables exist; migration runs cleanly from an empty database.
 
 **Commit:** `feat: database schema and initial migration`
 
@@ -85,27 +130,22 @@ other, which is the part that breaks.
 
 The riskiest milestone. Budget real time for it.
 
-- [ ] Hardcode the 50 state codes + `DC` + `US` and their names; seed the `states` table
-- [ ] Define the fuel allow-list as an explicit constant. Start with:
-      `COW` (coal), `NG` (natural gas), `NUC` (nuclear), `HYC` (conventional hydro),
-      `WND` (wind), `SUN` (solar), `PEL`+`PC` (petroleum), `GEO` (geothermal),
-      `WWW`/`WAS` (biomass/waste), `OTH` (other).
-      **Verify these codes against the live API before trusting them.**
-      Anything not on the list is skipped — this is what prevents double counting.
+- [ ] Seed `states` with 50 states + DC + US
+- [ ] Define the fuel allow-list as an explicit constant:
+      `COW` coal, `NG` gas, `NUC` nuclear, `HYC` hydro, `WND` wind, `SUN` solar,
+      `PEL`/`PC` petroleum, `GEO` geothermal, `WWW`/`WAS` biomass, `OTH` other.
+      **Verify these against the live API before trusting them.**
 - [ ] `app/ingest.py`:
-      - fetch one state, one year first and print the raw JSON
-      - page through results using `offset`/`length` until exhausted
-      - upsert into `generation` using `ON CONFLICT (state_code, year, fuel_code) DO UPDATE`
-      - respect rate limits: sleep briefly between requests
-      - log progress per state so a long run isn't silent
-- [ ] Run it for a single state and a single year. Check the numbers against
-      EIA's own website for that state. **Do not skip this.** If the numbers are
-      wrong here, every chart you build later is wrong.
-- [ ] Run the full ingest: all states, 2015 to the latest available year
-- [ ] Run it a second time and confirm the row count does not change (idempotent)
+      - fetch one state, one year, print raw JSON first
+      - page through with `offset`/`length`
+      - upsert on the unique constraint
+      - sleep between requests
+      - log progress per state
+- [ ] Run for one state/year and **check the numbers against eia.gov by hand**
+- [ ] Full ingest: all states, 2015 to latest
+- [ ] Run twice, confirm row count unchanged (idempotent)
 
-**Verify:** `SELECT COUNT(*) FROM generation;` returns thousands of rows.
-Spot-check your home state's total against eia.gov.
+**Verify:** thousands of rows; spot-check matches EIA's website.
 
 **Commit:** `feat: EIA ingest script with idempotent upsert`
 
@@ -113,16 +153,14 @@ Spot-check your home state's total against eia.gov.
 
 ## Milestone 4 — API endpoints
 
-- [ ] `app/schemas.py` — Pydantic models for all three responses in SPEC §6
-- [ ] `GET /api/years` — distinct years present, plus the max as `latest`
-- [ ] `GET /api/states?year=` — per-state totals, excluding the `US` row
-- [ ] `GET /api/generation?year=&state=` — fuel breakdown with server-computed percents
-- [ ] Handle the error cases: unknown state code → 404, missing year → 400,
-      year with no data → empty list and 200, not a crash
-- [ ] Open `/docs` and exercise every endpoint by hand
+- [ ] `app/schemas.py` — Pydantic models for the three responses in SPEC §6
+- [ ] `GET /api/years`
+- [ ] `GET /api/states?year=`
+- [ ] `GET /api/generation?year=&state=`
+- [ ] Error cases: unknown state → 404, missing year → 400, empty year → 200 with empty list
+- [ ] Exercise every endpoint at `/docs`
 
-**Verify:** all three endpoints return correct JSON at `/docs`. Percentages for
-any one state sum to approximately 100.
+**Verify:** percentages for any one state sum to ~100.
 
 **Commit:** `feat: generation API endpoints`
 
@@ -130,17 +168,15 @@ any one state sum to approximately 100.
 
 ## Milestone 5 — Table view (US-1, US-7, US-8)
 
-First real UI. Table before map — a table is easy to debug and makes wrong data
-obvious, whereas a map will happily render nonsense in a pretty color.
+Table before map: wrong numbers are obvious in a table, invisible in a map.
 
-- [ ] `src/types.ts` — TypeScript types mirroring the API responses
-- [ ] `src/api.ts` — one function per endpoint, all fetch calls live here
-- [ ] `YearPicker.tsx` — dropdown populated from `/api/years`, defaults to `latest`
-- [ ] `StateTable.tsx` — all states for the selected year, sortable by name and total
-- [ ] Loading and error states that are actually visible, not a blank screen
+- [ ] `src/types.ts` mirroring the API responses
+- [ ] `src/api.ts` — all fetch calls in one file
+- [ ] `YearPicker.tsx` — dropdown from `/api/years`, defaults to `latest`
+- [ ] `StateTable.tsx` — sortable by name and total
+- [ ] Visible loading and error states
 
-**Verify:** change the year, the table changes. Sorting works. Kill the backend
-and confirm you see an error message rather than a white page.
+**Verify:** year changes update the table; killing the backend shows an error, not a white page.
 
 **Commit:** `feat: state totals table with year picker`
 
@@ -148,17 +184,15 @@ and confirm you see an error message rather than a white page.
 
 ## Milestone 6 — Fuel breakdown (US-3, US-4, US-5, US-6)
 
-- [ ] Selected-state React state in `App.tsx`, defaulting to `null` (= national view)
-- [ ] Clicking a table row selects that state; a "Back to US" control clears it
-- [ ] `FuelBreakdown.tsx` — table of fuel, generation, percent
-- [ ] Add a Recharts bar chart of the same data
-- [ ] A fixed color per fuel type, defined once in a shared constant and reused
-      everywhere (solar yellow, wind blue, nuclear purple, etc.)
-- [ ] Handle negative values (pumped storage) without breaking the chart
+- [ ] Selected-state state in `App.tsx`, `null` = national view
+- [ ] Row click selects; "Back to US" clears
+- [ ] `FuelBreakdown.tsx` — fuel, generation, percent
+- [ ] Recharts bar chart
+- [ ] Fixed color per fuel, defined once and shared
+- [ ] Handle negative values (pumped storage)
 
-**Verify:** click Texas, see a gas-dominated mix. Click Washington, see hydro
-dominant. Click Vermont, see almost no fossil. If those look wrong, the ingest
-is wrong — go back to Milestone 3.
+**Verify:** Texas gas-heavy, Washington hydro-heavy, Vermont almost no fossil.
+If those look wrong, the ingest is wrong — go back to Milestone 3.
 
 **Commit:** `feat: fuel type breakdown with chart`
 
@@ -166,17 +200,12 @@ is wrong — go back to Milestone 3.
 
 ## Milestone 7 — Map (US-2, US-3)
 
-Last, because it is the most fiddly and the least essential.
+- [ ] `npm i react-simple-maps`, add us-atlas TopoJSON
+- [ ] Shade states by total generation
+- [ ] Click to select — same handler as the table
+- [ ] Hover tooltip, selected-state highlight, legend
 
-- [ ] `npm i react-simple-maps` and add the us-atlas TopoJSON
-- [ ] Render all states, shade by total generation using a sequential color scale
-- [ ] Clicking a state selects it — same handler the table uses
-- [ ] Hover tooltip with state name and total
-- [ ] Highlight the currently selected state
-- [ ] Legend explaining the color scale
-
-**Verify:** Texas is the darkest state. Clicking the map and clicking the table
-produce identical results.
+**Verify:** Texas darkest; map and table clicks behave identically.
 
 **Commit:** `feat: choropleth map of state generation`
 
@@ -184,12 +213,10 @@ produce identical results.
 
 ## Milestone 8 — Polish and document
 
-- [ ] `README.md` with real setup steps, written as if for a stranger
-- [ ] Format the big numbers with thousands separators and sensible units
-- [ ] Add the units and a "data source: EIA Form EIA-923" footer with a link
-- [ ] Make it not broken at tablet width
-- [ ] Fresh-clone test: clone into a new folder, follow only the README, confirm
-      it runs. This catches every undocumented step.
+- [ ] `README.md` written for a stranger
+- [ ] Thousands separators, units, EIA attribution footer
+- [ ] Not broken at tablet width
+- [ ] Fresh-clone test following only the README
 
 **Commit:** `docs: setup instructions and final polish`
 
@@ -197,22 +224,16 @@ produce identical results.
 
 ## Working rules
 
-**One milestone per Claude Code session.** Start the session by pointing at
-`SPEC.md`, `PLAN.md`, and the milestone number. Long sessions accumulate
-context and drift.
+**One milestone per session.** Start by pointing at `SPEC.md`, `PLAN.md`, and the
+milestone number.
 
-**Commit at every milestone boundary**, with the app in a working state. A
-milestone that doesn't run doesn't get committed to `main`.
+**Commit at every milestone boundary**, with the app working. A milestone that
+doesn't run doesn't get committed to `main`.
 
-**Read the code before accepting it.** If you can't explain what a file does,
-ask for an explanation before moving on. The point of this project is that you
-understand it afterwards. Code you can't read is code you can't debug, and you
-will need to debug it.
+**Read the code before accepting it.** If you can't explain a file, ask before
+moving on. Code you can't read is code you can't debug.
 
-**When something breaks, read the actual error.** The full traceback or console
-error, top to bottom. Paste it in full when asking for help — the useful line is
-usually not the last one.
+**Read tracebacks from the bottom up.** The last line is the actual error;
+everything above it is usually library internals.
 
-**If a milestone is taking far longer than the others, stop and reconsider the
-approach** rather than pushing through. That's usually a sign the design is
-fighting you, not that you're doing it wrong.
+**Check the prompt for `(.venv)`** before running anything Python.

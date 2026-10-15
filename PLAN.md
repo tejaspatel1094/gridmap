@@ -1,18 +1,14 @@
 # PLAN.md — Build Plan
 
 > Read `SPEC.md` first. This file is the ordered list of steps.
->
-> **How to use this file:** do one milestone at a time. Each milestone ends with
-> a working app and a git commit. Do not start the next milestone until the
-> checkboxes in the current one are ticked.
+> One milestone at a time. Each ends with a working app and a git commit.
 
 ---
 
 ## Current state
 
-**Last updated:** October 2026
-**Milestones complete:** 0, 1
-**Next up:** Milestone 2 — database schema and migrations
+**Milestones complete:** 0, 1, 2
+**Next up:** Milestone 3 — ingest EIA data
 
 ### Where things live
 
@@ -20,132 +16,134 @@
 |-------|----------|
 | Project root | `/Users/tejaspatel/Development/gridmap` |
 | GitHub repo | `github.com/tejaspatel1094/gridmap` |
-| Backend | `backend/` — venv at `backend/.venv` |
-| Frontend | `frontend/` |
+| Backend | `backend/` — venv at `backend/.venv`, Python 3.15 |
+| Frontend | `frontend/` — React + TS + Vite, Node 26 |
 | Database | Postgres 16 in Docker, `localhost:5432` |
+| Migrations | `backend/alembic/versions/` |
 
 ### How to start the app
 
-Three terminals, all three required:
-
 ```bash
-# 1. Database (runs in background, survives terminal close)
-cd ~/Development/gridmap
-docker compose up -d
+# 1. Database (background; survives terminal close)
+cd ~/Development/gridmap && docker compose up -d
 
-# 2. API — the `source` line is required in EVERY new terminal
+# 2. API — `source` required in EVERY new terminal
 cd ~/Development/gridmap/backend
 source .venv/bin/activate
 uvicorn app.main:app --reload
 
 # 3. Frontend
-cd ~/Development/gridmap/frontend
-npm run dev
+cd ~/Development/gridmap/frontend && npm run dev
 ```
 
-Then open http://localhost:5173
+Open http://localhost:5173 — API docs at http://localhost:8000/docs
 
-### Decisions made during the build that differ from the original plan
+### Useful database commands
 
-- **Python 3.15**, not 3.11. The system Python was 3.9 (end of life), so the venv
-  was rebuilt on Homebrew's 3.15. Note that pinned versions in `requirements.txt`
-  had to be regenerated — `psycopg-binary` had no wheel for 3.15 at the old pin.
-  **Rule learned: pin within a Python version, regenerate when changing versions.**
+```bash
+docker compose exec db psql -U gridmap -d gridmap -c "\dt"           # list tables
+docker compose exec db psql -U gridmap -d gridmap -c "\d generation" # describe a table
+docker compose exec db psql -U gridmap -d gridmap                    # interactive shell (\q to quit)
+```
+
+### Decisions that differ from the original plan
+
+- **Python 3.15**, not 3.11 — system Python was 3.9 (EOL). Pins had to be
+  regenerated; `psycopg-binary` had no wheel at the old pin.
+  *Rule: pin within a Python version, regenerate when changing versions.*
 - **Node 26** via Homebrew.
-- **ESLint** chosen over Oxlint during Vite scaffolding — more common, so
-  error messages are searchable.
-- **Docker kept** rather than falling back to SQLite. Docker Desktop was
-  available after all.
-- **Separate repo**, not nested inside VisualMap. An early attempt at nesting
-  created a gitlink (mode 160000) that pushed a pointer instead of the files.
+- **ESLint** over Oxlint — more common, so errors are searchable.
+- **Docker kept** rather than the SQLite fallback.
+- **Separate repo**, not nested inside VisualMap. Nesting created a gitlink
+  (mode 160000) that pushed a pointer instead of files.
 
 ---
 
-## Milestone 0 — Prerequisites ✅ COMPLETE
+## Milestone 0 — Prerequisites ✅
 
-- [x] EIA API key registered and stored in `.env`
-- [x] Node 26 installed (`brew install node`)
-- [x] Python 3.15 installed (`brew install python@3.15`)
-- [x] Docker Desktop installed and running
-- [x] GitHub repo `gridmap` created
+- [x] EIA API key registered, stored in `.env`
+- [x] Node 26, Python 3.15, Docker Desktop installed
+- [x] GitHub repo created
 
 ---
 
-## Milestone 1 — Skeleton that runs end to end ✅ COMPLETE
+## Milestone 1 — Skeleton that runs end to end ✅
 
-**Goal:** a browser page displaying a value fetched from the API, which got it
-from Postgres. Achieved — the page shows `api: ok` / `db: ok`.
+Browser shows `api: ok` / `db: ok`, fetched from Postgres via FastAPI.
 
-- [x] `git init`, `.gitignore` covering `.env`, `.venv/`, `node_modules/`, `dist/`
-- [x] `SPEC.md`, `PLAN.md`, `CLAUDE.md` committed
-- [x] `docker-compose.yml` with Postgres 16, named volume `pgdata`, port 5432
-- [x] `docker compose up -d` — verified with
-      `docker compose exec db psql -U gridmap -d gridmap -c "SELECT version();"`
-- [x] `backend/.venv` created, packages installed, `requirements.txt` frozen
+- [x] `.gitignore` covering `.env`, `.venv/`, `node_modules/`, `dist/`
+- [x] `docker-compose.yml` — Postgres 16, named volume `pgdata`, port 5432
+- [x] `backend/.venv`, packages installed, `requirements.txt` frozen
 - [x] `app/config.py` — pydantic-settings reading `../.env`
-- [x] `app/db.py` — SQLAlchemy engine, `SessionLocal`, `get_db` dependency
-- [x] `app/main.py` — FastAPI app, CORS middleware, `GET /api/health`
-- [x] `frontend/` scaffolded with Vite + React + TypeScript
-- [x] Vite dev proxy forwarding `/api` to `localhost:8000`
-- [x] `App.tsx` fetching `/api/health` with loading and error states
-- [x] Verified: browser shows `api: ok`, `db: ok`; uvicorn logs `200 OK`
+- [x] `app/db.py` — engine, `SessionLocal`, `get_db` dependency
+- [x] `app/main.py` — FastAPI app, CORS, `GET /api/health`
+- [x] `frontend/` scaffolded; Vite proxy forwarding `/api` to `:8000`
+- [x] `App.tsx` fetching health with loading and error states
 
 **Committed:** `feat: end-to-end skeleton with health check`
 
-### Problems hit and how they were solved
+---
 
-Keep these — they will recur.
+## Milestone 2 — Schema and migrations ✅
 
-| Symptom | Cause | Fix |
-|---------|-------|-----|
-| `command not found: uvicorn` / `pip` / `python` | venv not activated in a new terminal | `source .venv/bin/activate` — check for `(.venv)` in the prompt |
-| `(.venv)` present but tool still missing | venv active but empty after `rm -rf .venv` | `pip install -r requirements.txt` |
-| Claude Code "no file tools" | Corporate managed settings denying all tools + filesystem sandbox | Not self-fixable; built manually instead |
-| Files invisible to tooling | Filenames saved as `# SPEC.md` with a literal `#` prefix | `mv "# SPEC.md" SPEC.md` — quotes required, `#` starts a comment in bash |
-| `create mode 160000 gridmap` | `git init` inside an existing repo created a gitlink | `git rm --cached gridmap`, move folder out, init separately |
-| `Address already in use` | Old uvicorn still holding port 8000 | `kill -9 $(lsof -t -i :8000)` |
-| `No module named 'app'` | `app/` folder and `__init__.py` not created yet | Create the folder with an empty `__init__.py` |
-| `Attribute "app" not found` | `main.py` existed but was empty | Paste the contents in |
-| `No matching distribution psycopg-binary==3.2.13` | Pinned version had no wheel for Python 3.15 | Reinstall unpinned, re-freeze |
+- [x] `app/models.py` — `State` and `Generation` per SPEC §4
+- [x] `UNIQUE (state_code, year, fuel_code)` as `uq_state_year_fuel`
+- [x] `alembic init alembic`, `env.py` wired to `settings.DATABASE_URL` and `Base.metadata`
+- [x] Migration autogenerated, read, and applied
+- [x] `states`, `generation`, `alembic_version` exist in Postgres
+
+**Committed:** `feat: database schema and initial migration`
+
+> Outstanding: confirm `uq_state_year_fuel` with `\d generation` before starting
+> the ingest. The upsert depends on it.
 
 ---
 
-## Milestone 2 — Schema and migrations ⬅ NEXT
+## Milestone 3 — Ingest EIA data ⬅ NEXT
 
-- [ ] `app/models.py` — `State` and `Generation` tables per SPEC §4,
-      including `UNIQUE (state_code, year, fuel_code)`
-- [ ] `alembic init alembic`, point it at `DATABASE_URL` from config
-- [ ] Autogenerate the first migration, **read it before applying**
-- [ ] `alembic upgrade head`
-- [ ] Confirm both tables exist in Postgres
-- [ ] Test the reset path: `alembic downgrade base` then `upgrade head`
+**The riskiest milestone.** Everything before this fails loudly — a command
+errors and you fix it. Ingest fails *quietly*: it can report thousands of rows
+and still be wrong, because EIA returns both aggregate fuel codes (`ALL`, `REN`)
+and specific ones (`SUN`, `WND`). Summing both double-counts, consistently, in a
+way that looks entirely plausible until checked against a real number.
 
-**Verify:** tables exist; migration runs cleanly from an empty database.
+So the order below is deliberately slow. Do not collapse the steps.
 
-**Commit:** `feat: database schema and initial migration`
+### 3a. Look at the data before writing any code
 
----
+- [ ] Throwaway script: fetch **one state, one year**, print raw JSON
+- [ ] No database writes at this stage
+- [ ] Read the actual `fueltypeid` values returned
 
-## Milestone 3 — Ingest EIA data
+### 3b. Build the fuel allow-list from what you saw
 
-The riskiest milestone. Budget real time for it.
+- [ ] Define an explicit constant — not a guess from the spec
+- [ ] Starting candidates: `COW` coal, `NG` gas, `NUC` nuclear, `HYC` hydro,
+      `WND` wind, `SUN` solar, `PEL`/`PC` petroleum, `GEO` geothermal,
+      `WWW`/`WAS` biomass, `OTH` other
+- [ ] Anything not on the list is skipped. This is the double-count guard.
 
-- [ ] Seed `states` with 50 states + DC + US
-- [ ] Define the fuel allow-list as an explicit constant:
-      `COW` coal, `NG` gas, `NUC` nuclear, `HYC` hydro, `WND` wind, `SUN` solar,
-      `PEL`/`PC` petroleum, `GEO` geothermal, `WWW`/`WAS` biomass, `OTH` other.
-      **Verify these against the live API before trusting them.**
-- [ ] `app/ingest.py`:
-      - fetch one state, one year, print raw JSON first
-      - page through with `offset`/`length`
-      - upsert on the unique constraint
-      - sleep between requests
-      - log progress per state
-- [ ] Run for one state/year and **check the numbers against eia.gov by hand**
-- [ ] Full ingest: all states, 2015 to latest
-- [ ] Run twice, confirm row count unchanged (idempotent)
+### 3c. Seed the states table
 
-**Verify:** thousands of rows; spot-check matches EIA's website.
+- [ ] 50 states + `DC` + `US`, with names
+- [ ] `is_national = true` only for `US`
+
+### 3d. Write one state, then verify by hand
+
+- [ ] Upsert via `ON CONFLICT (state_code, year, fuel_code) DO UPDATE`
+- [ ] Query it back out of Postgres
+- [ ] **Check the total against eia.gov for that state and year.**
+      Do not skip this. Every chart in Milestones 6 and 7 inherits this number.
+
+### 3e. Full ingest
+
+- [ ] All states, 2015 to the latest available year
+- [ ] Page through results with `offset` / `length`
+- [ ] Sleep briefly between requests
+- [ ] Log progress per state so a long run isn't silent
+- [ ] Run it **twice**; row count must not change (idempotent)
+
+**Verify:** thousands of rows; spot-checked total matches EIA's website.
 
 **Commit:** `feat: EIA ingest script with idempotent upsert`
 
@@ -157,7 +155,7 @@ The riskiest milestone. Budget real time for it.
 - [ ] `GET /api/years`
 - [ ] `GET /api/states?year=`
 - [ ] `GET /api/generation?year=&state=`
-- [ ] Error cases: unknown state → 404, missing year → 400, empty year → 200 with empty list
+- [ ] Errors: unknown state → 404, missing year → 400, empty year → 200 + empty list
 - [ ] Exercise every endpoint at `/docs`
 
 **Verify:** percentages for any one state sum to ~100.
@@ -170,21 +168,22 @@ The riskiest milestone. Budget real time for it.
 
 Table before map: wrong numbers are obvious in a table, invisible in a map.
 
-- [ ] `src/types.ts` mirroring the API responses
+- [ ] `src/types.ts` mirroring API responses
 - [ ] `src/api.ts` — all fetch calls in one file
 - [ ] `YearPicker.tsx` — dropdown from `/api/years`, defaults to `latest`
 - [ ] `StateTable.tsx` — sortable by name and total
 - [ ] Visible loading and error states
 
-**Verify:** year changes update the table; killing the backend shows an error, not a white page.
+**Verify:** changing year updates the table; killing the backend shows an error,
+not a white page.
 
 **Commit:** `feat: state totals table with year picker`
 
 ---
 
-## Milestone 6 — Fuel breakdown (US-3, US-4, US-5, US-6)
+## Milestone 6 — Fuel breakdown (US-3 to US-6)
 
-- [ ] Selected-state state in `App.tsx`, `null` = national view
+- [ ] Selected-state state in `App.tsx`; `null` = national view
 - [ ] Row click selects; "Back to US" clears
 - [ ] `FuelBreakdown.tsx` — fuel, generation, percent
 - [ ] Recharts bar chart
@@ -203,7 +202,7 @@ If those look wrong, the ingest is wrong — go back to Milestone 3.
 - [ ] `npm i react-simple-maps`, add us-atlas TopoJSON
 - [ ] Shade states by total generation
 - [ ] Click to select — same handler as the table
-- [ ] Hover tooltip, selected-state highlight, legend
+- [ ] Hover tooltip, selected highlight, legend
 
 **Verify:** Texas darkest; map and table clicks behave identically.
 
@@ -222,18 +221,38 @@ If those look wrong, the ingest is wrong — go back to Milestone 3.
 
 ---
 
+## Problems hit so far, and their fixes
+
+These recur. The venv one certainly will.
+
+| Symptom | Cause | Fix |
+|---------|-------|-----|
+| `command not found: uvicorn` / `pip` / `python` | venv not activated in a new terminal | `source .venv/bin/activate` — look for `(.venv)` in the prompt |
+| `(.venv)` present but tool still missing | venv active but empty after `rm -rf .venv` | `pip install -r requirements.txt` |
+| Claude Code "no file tools" | Corporate managed settings denying all tools + filesystem sandbox | Not self-fixable; built manually instead |
+| Files invisible to tooling | Filenames saved as `# SPEC.md` | `mv "# SPEC.md" SPEC.md` — quotes required; `#` starts a comment in bash |
+| `create mode 160000 gridmap` | `git init` inside an existing repo created a gitlink | `git rm --cached`, move folder out, init separately |
+| `Address already in use` | Old uvicorn holding port 8000 | `kill -9 $(lsof -t -i :8000)` |
+| `No module named 'app'` | `app/` and `__init__.py` not created yet | Create folder with empty `__init__.py` |
+| `Attribute "app" not found` | `main.py` existed but was empty | Paste contents in |
+| `No matching distribution psycopg-binary==3.2.13` | Pinned version had no wheel for Python 3.15 | Reinstall unpinned, re-freeze |
+
+Nearly every one is environmental rather than conceptual — filenames, paths,
+activation state, ports, version pins. That ratio is normal.
+
+---
+
 ## Working rules
 
-**One milestone per session.** Start by pointing at `SPEC.md`, `PLAN.md`, and the
-milestone number.
+**Commit at every milestone boundary**, with the app working.
 
-**Commit at every milestone boundary**, with the app working. A milestone that
-doesn't run doesn't get committed to `main`.
+**Read the code before accepting it.** If you can't explain a file, ask first.
 
-**Read the code before accepting it.** If you can't explain a file, ask before
-moving on. Code you can't read is code you can't debug.
+**Read tracebacks from the bottom up.** The last line is the error; everything
+above is usually library internals.
 
-**Read tracebacks from the bottom up.** The last line is the actual error;
-everything above it is usually library internals.
+**"Done" means the output was correct, not that the command finished.** Check
+`git status` before committing, look at the GitHub page after pushing, read the
+migration before applying it.
 
 **Check the prompt for `(.venv)`** before running anything Python.

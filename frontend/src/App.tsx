@@ -1,32 +1,40 @@
 import { useEffect, useState } from 'react'
-
-type Health = {
-  api: string
-  db: string
-}
+import { fetchStates, fetchYears } from './api'
+import { StateTable } from './components/StateTable'
+import { YearPicker } from './components/YearPicker'
+import type { StatesResponse } from './types'
 
 function App() {
-  const [health, setHealth] = useState<Health | null>(null)
+  const [years, setYears] = useState<number[]>([])
+  const [year, setYear] = useState<number | null>(null)
+  const [data, setData] = useState<StatesResponse | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    fetch('/api/health')
+    fetchYears()
       .then((res) => {
-        if (!res.ok) throw new Error(`HTTP ${res.status}`)
-        return res.json()
+        setYears(res.years)
+        setYear(res.latest)
       })
-      .then(setHealth)
       .catch((err) => setError(err.message))
   }, [])
 
+  useEffect(() => {
+    if (year === null) return
+    setData(null)
+    fetchStates(year)
+      .then(setData)
+      .catch((err) => setError(err.message))
+  }, [year])
+
   if (error) return <p>Error: {error}</p>
-  if (!health) return <p>Loading...</p>
+  if (year === null) return <p>Loading…</p>
 
   return (
-    <div>
+    <div style={{ padding: '2rem', fontFamily: 'system-ui' }}>
       <h1>GridMap</h1>
-      <p>api: {health.api}</p>
-      <p>db: {health.db}</p>
+      <YearPicker years={years} selected={year} onChange={setYear} />
+      {data ? <StateTable states={data.states} units={data.units} /> : <p>Loading…</p>}
     </div>
   )
 }

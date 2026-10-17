@@ -5,6 +5,9 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.db import get_db
+from app.routes import router
+
+
 
 app = FastAPI(title="GridMap API")
 
@@ -15,8 +18,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.include_router(router)
 
 @app.get("/api/health")
 def health(db: Session = Depends(get_db)):
     result = db.execute(text("SELECT 1")).scalar()
     return {"api": "ok", "db": "ok" if result == 1 else "error"}
+

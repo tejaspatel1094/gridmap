@@ -4,6 +4,7 @@ import { FuelBreakdown } from './components/FuelBreakdown'
 import { StateTable } from './components/StateTable'
 import { YearPicker } from './components/YearPicker'
 import type { GenerationResponse, StatesResponse } from './types'
+import { StateMap } from './components/StateMap'
 
 function App() {
   const [years, setYears] = useState<number[]>([])
@@ -52,7 +53,9 @@ function App() {
       ) : (
         <p>Loading…</p>
       )}
-
+{states && (
+  <StateMap states={states.states} selected={selected} onSelect={setSelected} />
+)}
       <h2>All states</h2>
       {states ? (
         <StateTable states={states.states} units={states.units} onSelect={setSelected} />

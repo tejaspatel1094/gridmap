@@ -6,9 +6,10 @@ type SortKey = 'name' | 'total'
 type Props = {
   states: StateTotal[]
   units: string
+  onSelect: (code: string) => void
 }
 
-export function StateTable({ states, units }: Props) {
+export function StateTable({ states, units, onSelect }: Props) {
   const [sortKey, setSortKey] = useState<SortKey>('total')
   const [ascending, setAscending] = useState(false)
 
@@ -42,7 +43,10 @@ export function StateTable({ states, units }: Props) {
       </thead>
       <tbody>
         {sorted.map((s) => (
-          <tr key={s.code}>
+          <tr
+            key={s.code}
+            onClick={() => onSelect(s.code)}
+            style={{ cursor: 'pointer' }}>
             <td>{s.name}</td>
             <td>{s.total.toLocaleString(undefined, { maximumFractionDigits: 0 })}</td>
           </tr>

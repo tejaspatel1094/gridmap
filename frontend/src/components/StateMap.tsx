@@ -25,6 +25,7 @@ type Props = {
 export function StateMap({ states, selected, onSelect }: Props) {
   const [hovered, setHovered] = useState<string | null>(null)
 
+  console.log('STATES:', states.length, states[0])
   const totals = new Map(states.map((s) => [s.code, s.total]))
   const names = new Map(states.map((s) => [s.code, s.name]))
   const max = Math.max(...states.map((s) => s.total), 1)
@@ -60,6 +61,8 @@ export function StateMap({ states, selected, onSelect }: Props) {
           {({ geographies }) =>
             geographies.map((geo) => {
               const code = codeFor(geo.id)
+              
+              console.log(geo.id, typeof geo.id, code)
               const fill = colorFor(code)
               const isSelected = code === selected
               return (
@@ -72,7 +75,7 @@ export function StateMap({ states, selected, onSelect }: Props) {
                   style={{
                     default: {
                       fill,
-                      stroke: isSelected ? '#f0c419' : '#1a1a1a',
+                      stroke: isSelected ? '#f0c419' : '#555',
                       strokeWidth: isSelected ? 2 : 0.5,
                       outline: 'none',
                     },

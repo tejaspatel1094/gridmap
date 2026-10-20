@@ -1,272 +1,283 @@
-# PLAN.md — Build Plan
+# GridMap
 
-> Read `SPEC.md` first. This file is the ordered list of steps.
-> One milestone at a time. Each ends with a working app and a git commit.
+A web app showing US electricity generation by state and fuel type, using data
+from the EIA Open Data API.
+
+Pick a year, see every state's total generation as a table and a shaded map,
+click a state to see its mix of coal, gas, nuclear, wind, solar, hydro and more
+as numbers and a chart.
+
+Data source: [EIA Form EIA-923](https://www.eia.gov/opendata/), utility-scale
+electric power sector only. Figures are annual and lag the current year by
+roughly one to two years.
 
 ---
 
-## Current state
+## Stack
 
-**Milestones complete:** 0, 1, 2, 3, 4
-**Next up:** Milestone 5 — table view (the first real UI)
+| Layer | Technology |
+|-------|-----------|
+| Frontend | React 19, TypeScript, Vite, Recharts, react-simple-maps |
+| Backend | FastAPI, SQLAlchemy 2, Alembic, Python 3.15 |
+| Database | PostgreSQL 16 (Docker) |
+| Data | EIA Open Data API v2 |
 
-The entire backend is finished and verified. `/api/generation?year=2023&state=CO`
-returns a total of **57297.55904**, matching EIA's own `ALL` row exactly.
+No authentication — all data is public and identical for every visitor.
 
-### Where things live
+---
 
-| Thing | Location |
-|-------|----------|
-| Project root | `/Users/tejaspatel/Development/gridmap` |
-| GitHub repo | `github.com/tejaspatel1094/gridmap` |
-| Backend | `backend/` — venv at `backend/.venv`, Python 3.15 |
-| Frontend | `frontend/` — React + TS + Vite, Node 26 |
-| Database | Postgres 16 in Docker, `localhost:5432` |
-| Migrations | `backend/alembic/versions/` |
+## Prerequisites
 
-### How to start the app
+- **Docker Desktop**, running
+- **Python 3.11+** (built on 3.15)
+- **Node 20+** (built on 26)
+- **An EIA API key** — free, 30 seconds:
+  https://www.eia.gov/opendata/register.php
+
+---
+
+## Setup from a fresh clone
+
+### 1. Clone and configure
 
 ```bash
-# 1. Database (background; survives terminal close)
-cd ~/Development/gridmap && docker compose up -d
+git clone https://github.com/tejaspatel1094/gridmap.git
+cd gridmap
+cp .env.example .env
+```
 
-# 2. API — `source` required in EVERY new terminal
-cd ~/Development/gridmap/backend
+Open `.env` and replace `your_key_here` with your EIA API key. This file is
+gitignored and must never be committed.
+
+### 2. Start the database
+
+```bash
+docker compose up -d
+docker compose ps
+```
+
+`gridmap-db` should show as running. Verify it accepts connections:
+
+```bash
+docker compose exec db psql -U gridmap -d gridmap -c "SELECT version();"
+```
+
+### 3. Set up the backend
+
+```bash
+cd backend
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+```
+
+Confirm the venv is active — your prompt should start with `(.venv)`.
+
+### 4. Create the schema
+
+```bash
+alembic upgrade head
+```
+
+Verify:
+
+```bash
+cd ..
+docker compose exec db psql -U gridmap -d gridmap -c "\dt"
+```
+
+You should see `states`, `generation` and `alembic_version`.
+
+### 5. Load the data
+
+```bash
+cd backend
+source .venv/bin/activate      # if not already active
+python -m app.ingest
+```
+
+Takes a few minutes — 52 requests to EIA with a pause between each. It prints
+a line per state and a row total at the end.
+
+Safe to re-run: the upsert is idempotent, so running it twice refreshes the
+data rather than duplicating it.
+
+### 6. Set up the frontend
+
+```bash
+cd ../frontend
+npm install
+```
+
+---
+
+## Running the app
+
+Three processes, three terminals. All three must be running.
+
+```bash
+# Terminal 1 — database (background; survives closing the terminal)
+cd gridmap
+docker compose up -d
+```
+
+```bash
+# Terminal 2 — API
+cd gridmap/backend
 source .venv/bin/activate
 uvicorn app.main:app --reload
-
-# 3. Frontend
-cd ~/Development/gridmap/frontend && npm run dev
 ```
-
-UI at http://localhost:5173 — API docs at http://localhost:8000/docs
-
-### Useful commands
 
 ```bash
-# Database
-docker compose exec db psql -U gridmap -d gridmap -c "\dt"
-docker compose exec db psql -U gridmap -d gridmap -c "\d generation"
-docker compose exec db psql -U gridmap -d gridmap           # interactive, \q to quit
+# Terminal 3 — frontend
+cd gridmap/frontend
+npm run dev
+```
 
-# Reload data (safe to re-run; upsert is idempotent)
-cd backend && source .venv/bin/activate && python -m app.ingest
+Then open **http://localhost:5173**
 
-# Port 8000 already in use
-kill -9 $(lsof -t -i :8000)
+Interactive API docs are at **http://localhost:8000/docs**
+
+---
+
+## Project layout
+
+```
+gridmap/
+├── docker-compose.yml      Postgres 16
+├── .env                    secrets — NOT committed
+├── .env.example            template — committed
+├── SPEC.md                 what this is and why
+├── PLAN.md                 build history and remaining work
+├── CLAUDE.md               conventions
+├── backend/
+│   ├── requirements.txt
+│   ├── alembic/versions/   migrations
+│   └── app/
+│       ├── config.py       env var loading
+│       ├── db.py           engine and session
+│       ├── models.py       SQLAlchemy tables
+│       ├── schemas.py      Pydantic response models
+│       ├── routes.py       the API endpoints
+│       ├── states_data.py  state list + fuel allow-list
+│       └── ingest.py       EIA → Postgres
+└── frontend/
+    ├── public/
+    │   └── states-10m.json US boundaries (TopoJSON)
+    └── src/
+        ├── api.ts          all fetch calls
+        ├── types.ts        mirrors the backend schemas
+        ├── fuelColors.ts   one color per fuel, shared
+        └── components/
+            ├── YearPicker.tsx
+            ├── StateMap.tsx
+            ├── StateTable.tsx
+            └── FuelBreakdown.tsx
 ```
 
 ---
 
-## Milestone 0 — Prerequisites ✅
-
-- [x] EIA API key registered, stored in `.env`
-- [x] Node 26, Python 3.15, Docker Desktop installed
-- [x] GitHub repo created
-
----
-
-## Milestone 1 — Skeleton that runs end to end ✅
-
-Browser shows `api: ok` / `db: ok`, fetched from Postgres via FastAPI.
-
-- [x] `.gitignore` covering `.env`, `.venv/`, `node_modules/`, `dist/`
-- [x] `docker-compose.yml` — Postgres 16, volume `pgdata`, port 5432
-- [x] `app/config.py`, `app/db.py`, `app/main.py`
-- [x] `frontend/` scaffolded; Vite proxy forwarding `/api` to `:8000`
-- [x] `App.tsx` fetching health with loading and error states
-
-**Committed:** `feat: end-to-end skeleton with health check`
-
----
-
-## Milestone 2 — Schema and migrations ✅
-
-- [x] `app/models.py` — `State` and `Generation`
-- [x] `UNIQUE (state_code, year, fuel_code)` as `uq_state_year_fuel`
-- [x] Alembic wired to `settings.DATABASE_URL` and `Base.metadata`
-- [x] Migration autogenerated, read, applied
-
-**Committed:** `feat: database schema and initial migration`
-
----
-
-## Milestone 3 — Ingest EIA data ✅
-
-The riskiest milestone, and it paid off. Full findings below.
-
-- [x] Explored the raw API before writing any ingest code
-- [x] Derived the fuel allow-list from actual responses, not from guesses
-- [x] Verified the allow-list against Colorado and Washington: `DIFF = 0.00000`
-- [x] `app/states_data.py` — 51 states + DC, plus `FUEL_ALLOWLIST`
-- [x] `app/ingest.py` — paged fetch, allow-list filter, idempotent upsert
-- [x] Full ingest, 2015–2024, all states plus the US aggregate
-
-**Committed:** `feat: EIA ingest script with idempotent upsert`
-
-### The fuel code hierarchy — DO NOT LOSE THIS
-
-EIA returns ~30 codes per state, nested at three levels. Summing them naively
-roughly triples the real total. Verified against Colorado 2023:
+## API
 
 ```
-ALL  57297.55904                    (grand total — EXCLUDE)
-├── FOS  35885.67218   fossil       (aggregate — EXCLUDE)
-│   ├── COW  18787.61670   all coal        ✅ USE
-│   ├── NGO  17050.44877   gas & other     ✅ USE
-│   └── PET     47.60671   petroleum       ✅ USE
-├── REN  21406.92186   renewable    (aggregate — EXCLUDE)
-│   ├── HYC   1583.01193   hydro           ✅ USE
-│   ├── WND  16088.97200   wind            ✅ USE
-│   ├── SUN   3601.42993   solar           ✅ USE
-│   └── BIO    133.50800   biomass         ✅ USE
-├── HPS     25.01000   pumped storage      ✅ USE
-└── OTH    -20.04500   other               ✅ USE
+GET /api/health
+  → { "api": "ok", "db": "ok" }
+
+GET /api/years
+  → { "years": [2015, ..., 2024], "latest": 2024 }
+
+GET /api/states?year=2023
+  → { "year", "units", "states": [{ "code", "name", "total" }, ...] }
+
+GET /api/generation?year=2023&state=CO
+  → { "year", "state", "name", "units", "total",
+      "fuels": [{ "code", "name", "generation", "percent" }, ...] }
 ```
 
-Leaves sum to exactly `ALL`.
+`state` defaults to `US` (the national aggregate) when omitted.
 
-**The `AOR` trap.** `AOR` ("all renewables") and `REN` ("renewable") differ by
-exactly `HYC`. In Washington, `AOR` is 8,313 while `REN` is 69,759 — the 61,445
-gap is conventional hydro. Picking the wrong parent would have made every
-hydro-heavy state wildly wrong.
+---
 
-**Duplicate pairs.** `BIS`/`BIT`, `COL`/`COW`, `NG`/`NGO`, `PEL`/`PET`,
-`SUN`/`SPV`, `WND`/`WNT` return identical values where a state has only one
-subtype. They diverge elsewhere. Always take the aggregate of the pair.
+## Important: EIA fuel codes
 
-**Codes absent ≠ error.** Colorado returns no `NUC` or `GEO` because it has
-neither. Washington returns `NUC` at 8,435. Treat absence as zero.
+EIA returns roughly 30 fuel codes per state, nested three levels deep. Summing
+them naively roughly triples the real total. Only these eleven
+non-overlapping codes are stored:
 
-**Negative generation is real.** Washington's `HPS` is −3.002 — pumped storage
-consumed more than it produced. Charts must survive this.
+`COW` coal · `NGO` natural gas · `PET` petroleum · `NUC` nuclear ·
+`HYC` hydro · `WND` wind · `SUN` solar · `GEO` geothermal · `BIO` biomass ·
+`HPS` pumped storage · `OTH` other
 
-### Verification queries
+Everything else is skipped by the allow-list in `app/states_data.py`.
+
+Two traps worth knowing:
+
+- **`AOR` vs `REN`** — "all renewables" versus "renewable" differ by exactly
+  conventional hydro. In Washington that gap is 61,445 GWh.
+- **Negative generation is real.** Pumped storage can consume more than it
+  produces. Charts must handle it.
+
+Verify any change to the allow-list by summing the stored fuels for one state
+and comparing against EIA's own `ALL` row. The difference must be zero.
 
 ```sql
--- Must return 0. Any aggregate code here means double counting.
+-- Must return 0 rows
 SELECT COUNT(*) FROM generation WHERE fuel_code IN ('ALL','REN','FOS','AOR');
 
--- Must sum to 57297.55904
+-- Colorado 2023 must equal 57297.55904
 SELECT SUM(generation) FROM generation WHERE state_code='CO' AND year=2023;
 ```
 
 ---
 
-## Milestone 4 — API endpoints ✅
+## Troubleshooting
 
-- [x] `app/schemas.py` — Pydantic models for all three responses
-- [x] `GET /api/years` — distinct years plus `latest`
-- [x] `GET /api/states?year=` — per-state totals, US row excluded
-- [x] `GET /api/generation?year=&state=` — fuel breakdown with percents
-- [x] Router registered in `main.py` via `app.include_router(router)`
-- [x] Verified at `/docs`: Colorado 2023 total = 57297.55904 ✅
+**`command not found: uvicorn` / `pip` / `python`**
+The virtual environment isn't active. Run `source .venv/bin/activate` from
+`backend/`. Your prompt should show `(.venv)`. This is required in every new
+terminal.
 
-**Committed:** `feat: generation API endpoints`
+**`Address already in use` on port 8000**
+An old server is still running: `kill -9 $(lsof -t -i :8000)`
 
-**Note on percentages:** the denominator sums only positive generation.
-Including negatives (pumped storage) would push percentages above 100.
-Negative fuels correctly show a negative percent.
+**`connection refused` on port 5432**
+Postgres isn't running: `docker compose up -d`
 
----
+**Blank page in the browser**
+Open the console (Cmd+Option+J) — a JavaScript error will be there. A stale
+Vite cache can also cause it: `rm -rf node_modules/.vite` then `npm run dev`.
 
-## Milestone 5 — Table view ⬅ NEXT
-
-Table before map, deliberately. Wrong numbers are obvious in a table and
-invisible in a choropleth, which renders bad data as an attractive gradient.
-
-- [ ] `src/types.ts` — TypeScript types mirroring the three API responses
-- [ ] `src/api.ts` — all three fetch calls, one function each
-- [ ] `YearPicker.tsx` — dropdown from `/api/years`, defaults to `latest`
-- [ ] `StateTable.tsx` — all 51 states, sortable by name and by total
-- [ ] Loading and error states that are visible, not a blank screen
-
-**Verify:** changing the year updates the table. Texas leads by a wide margin.
-51 rows, not 52 — no "United States" row. Killing the backend shows an error
-message rather than a white page.
-
-**Commit:** `feat: state totals table with year picker`
+**Totals look roughly double**
+An aggregate fuel code slipped into the database. Run the verification query
+above, then re-check the allow-list.
 
 ---
 
-## Milestone 6 — Fuel breakdown
+## Known issues
 
-- [ ] Selected-state state in `App.tsx`; `null` = national view
-- [ ] Row click selects; "Back to US" clears
-- [ ] `FuelBreakdown.tsx` — fuel, generation, percent
-- [ ] Recharts bar chart
-- [ ] Fixed color per fuel, defined once and shared
-- [ ] Handle negative values (pumped storage)
-
-**Verify:** Colorado should show coal ~33%, gas ~30%, wind ~28%. Washington
-hydro-dominant. Vermont almost no fossil. These are known-good from Milestone 3.
-
-**Commit:** `feat: fuel type breakdown with chart`
+- Map shading renders all states the same color; selection and hover work.
+- Not optimised for mobile widths.
 
 ---
 
-## Milestone 7 — Map
+## Development notes
 
-- [ ] `npm i react-simple-maps`, add us-atlas TopoJSON
-- [ ] Shade states by total generation
-- [ ] Click to select — same handler as the table
-- [ ] Hover tooltip, selected highlight, legend
+Reload data at any time (safe, idempotent):
 
-**Verify:** Texas darkest; map and table clicks behave identically.
+```bash
+cd backend && source .venv/bin/activate && python -m app.ingest
+```
 
-**Commit:** `feat: choropleth map of state generation`
+Reset the database entirely:
 
----
+```bash
+docker compose down -v        # -v deletes the volume and all data
+docker compose up -d
+cd backend && alembic upgrade head && python -m app.ingest
+```
 
-## Milestone 8 — Polish and document
+Inspect the database:
 
-- [ ] `README.md` written for a stranger
-- [ ] Thousands separators, units, EIA attribution footer
-- [ ] Not broken at tablet width
-- [ ] Fresh-clone test following only the README
-
-**Commit:** `docs: setup instructions and final polish`
-
----
-
-## Problems hit, and their fixes
-
-These recur. The venv one certainly will.
-
-| Symptom | Cause | Fix |
-|---------|-------|-----|
-| `command not found: uvicorn` / `pip` / `python` | venv not activated in a new terminal | `source .venv/bin/activate` — look for `(.venv)` in the prompt |
-| `(.venv)` present but tool still missing | venv active but empty after `rm -rf .venv` | `pip install -r requirements.txt` |
-| Claude Code "no file tools" | Corporate managed settings denying all tools + filesystem sandbox | Not self-fixable; built manually instead |
-| Files invisible to tooling | Filenames saved as `# SPEC.md` | `mv "# SPEC.md" SPEC.md` — quotes required; `#` starts a comment in bash |
-| `create mode 160000 gridmap` | `git init` inside an existing repo created a gitlink | `git rm --cached`, move folder out, init separately |
-| `Address already in use` | Old uvicorn holding port 8000 | `kill -9 $(lsof -t -i :8000)` |
-| `No module named 'app'` | `app/` and `__init__.py` not created | Create folder with empty `__init__.py` |
-| `Attribute "app" not found` | `main.py` existed but was empty | Paste contents in |
-| `No matching distribution psycopg-binary==3.2.13` | Pinned version had no wheel for Python 3.15 | Reinstall unpinned, re-freeze |
-| New endpoints missing from `/docs` | Router defined but never registered | `app.include_router(router)` in `main.py` |
-
-Nearly every one is environmental rather than conceptual — filenames, paths,
-activation state, ports, version pins. That ratio is normal and doesn't improve
-much with experience; you just recognise the symptoms faster.
-
----
-
-## Working rules
-
-**Commit at every milestone boundary**, with the app working.
-
-**Read the code before accepting it.** If you can't explain a file, ask first.
-
-**Read tracebacks from the bottom up.** The last line is the error; everything
-above is usually library internals.
-
-**"Done" means the output was correct, not that the command finished.** Check
-`git status` before committing, look at the GitHub page after pushing, read the
-migration before applying it, read the response body rather than the status code.
-
-**Verify against a known-good number.** The whole ingest was validated by
-checking one state against a figure computed independently. Find that anchor
-before building anything on top of the data.
-
-**Check the prompt for `(.venv)`** before running anything Python.
+```bash
+docker compose exec db psql -U gridmap -d gridmap   # \dt to list, \q to quit
+```

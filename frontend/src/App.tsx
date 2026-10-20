@@ -62,6 +62,12 @@ function App() {
       ) : (
         <p>Loading…</p>
       )}
+    <footer style={{ marginTop: '3rem', fontSize: '0.85rem', opacity: 0.7 }}>
+  Data: <a href="https://www.eia.gov/opendata/" target="_blank" rel="noreferrer">
+    US Energy Information Administration
+  </a>, Form EIA-923. Utility-scale electric power sector only.
+  Figures in thousand megawatthours.
+</footer>
     </div>
   )
 }
